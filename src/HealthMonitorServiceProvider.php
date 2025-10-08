@@ -56,12 +56,21 @@ class HealthMonitorServiceProvider extends ServiceProvider
     {
         $schedule = $this->app->make(\Illuminate\Console\Scheduling\Schedule::class);
 
-        // Health check every 5 minutes (or configured interval)
+        // Health check every X minutes (configurable interval)
         $interval = config('health-monitor.check_interval', 5);
-        $schedule->command('health:check')
-                 ->everyMinutes($interval)
-                 ->withoutOverlapping()
-                 ->runInBackground();
+        
+        if ($interval === 1) {
+            $schedule->command('health:check')
+                     ->everyMinute()
+                     ->withoutOverlapping()
+                     ->runInBackground();
+        } else {
+            // For intervals > 1 minute, use cron expression
+            $schedule->command('health:check')
+                     ->cron("*/{$interval} * * * *")
+                     ->withoutOverlapping()
+                     ->runInBackground();
+        }
 
         // Database backup if enabled
         if (config('health-monitor.backup.enabled')) {
