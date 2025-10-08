@@ -19,8 +19,14 @@ class HealthMonitorServiceProvider extends ServiceProvider
             'health-monitor'
         );
 
-        $this->app->singleton('health-monitor', function ($app) {
+        // Bind HealthMonitor as singleton with config
+        $this->app->singleton(HealthMonitor::class, function ($app) {
             return new HealthMonitor($app['config']['health-monitor']);
+        });
+
+        // Also bind with string key for backward compatibility
+        $this->app->singleton('health-monitor', function ($app) {
+            return $app->make(HealthMonitor::class);
         });
     }
 

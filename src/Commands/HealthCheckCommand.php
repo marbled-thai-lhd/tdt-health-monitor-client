@@ -22,7 +22,7 @@ class HealthCheckCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(HealthMonitor $healthMonitor): int
+    public function handle(): int
     {
         $this->info('Starting health check...');
 
@@ -32,6 +32,14 @@ class HealthCheckCommand extends Command
         }
 
         try {
+            // Create HealthMonitor instance with config
+            $config = config('health-monitor');
+            if (!$config) {
+                $this->error('Health monitor configuration not found. Please publish the config first.');
+                return self::FAILURE;
+            }
+
+            $healthMonitor = new HealthMonitor($config);
             $report = $healthMonitor->performHealthCheck();
             
             if ($this->option('output') === 'table') {
