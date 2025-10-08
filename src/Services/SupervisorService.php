@@ -133,8 +133,20 @@ class SupervisorService
     protected function checkProcessStatus(string $processName): array
     {
         try {
-            $socketPath = $this->config['socket_path'] ?? '/var/run/supervisor.sock';
-            $command = "supervisorctl -s unix://{$socketPath} status {$processName}";
+            $socketPath = $this->config['socket_path'] ?? null;
+            
+            // Auto-detect socket path if not specified
+            if ($socketPath === null) {
+                $socketPath = $this->findSocketPath();
+            }
+            
+            // Check if socket exists, if not use default supervisorctl
+            if ($socketPath && file_exists($socketPath)) {
+                $command = "supervisorctl -s unix://{$socketPath} status {$processName}";
+            } else {
+                // Fallback to default supervisorctl without socket
+                $command = "supervisorctl status {$processName}";
+            }
             
             $output = shell_exec($command);
             
@@ -142,7 +154,16 @@ class SupervisorService
                 return ['status' => 'UNKNOWN', 'error' => 'Unable to execute supervisorctl'];
             }
             
-            return $this->parseStatusOutput(trim($output));
+            $trimmedOutput = trim($output);
+            
+            // Check for error messages
+            if (stripos($trimmedOutput, 'no such file') !== false || 
+                stripos($trimmedOutput, 'error') !== false ||
+                stripos($trimmedOutput, 'failed') !== false) {
+                return ['status' => 'ERROR', 'error' => $trimmedOutput];
+            }
+            
+            return $this->parseStatusOutput($trimmedOutput);
             
         } catch (\Exception $e) {
             return ['status' => 'ERROR', 'error' => $e->getMessage()];
@@ -155,6 +176,8 @@ class SupervisorService
     protected function parseStatusOutput(string $output): array
     {
         // Example output: "process_name RUNNING pid 1234, uptime 1:23:45"
+        // Real output: aripla-mail-queue                RUNNING   pid 88456, uptime 0:17:21
+        
         $parts = preg_split('/\s+/', $output);
         
         if (count($parts) < 2) {
@@ -247,5 +270,26 @@ class SupervisorService
         }
         
         return $processes;
+    }
+
+    /**
+     * Auto-detect supervisor socket path
+     */
+    protected function findSocketPath(): ?string
+    {
+        $possiblePaths = [
+            '/opt/homebrew/var/run/supervisor.sock',  // Homebrew on macOS
+            '/usr/local/var/run/supervisor.sock',     // MacPorts or manual install
+            '/var/run/supervisor.sock',               // Standard Linux
+            '/tmp/supervisor.sock',                   // Alternative location
+        ];
+
+        foreach ($possiblePaths as $path) {
+            if (file_exists($path)) {
+                return $path;
+            }
+        }
+
+        return null;
     }
 }

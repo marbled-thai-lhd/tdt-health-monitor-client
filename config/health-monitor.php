@@ -31,7 +31,7 @@ return [
     */
     'supervisor' => [
         'config_path' => env('SUPERVISOR_CONFIG_PATH', '/etc/supervisor/conf.d'),
-        'socket_path' => env('SUPERVISOR_SOCKET_PATH', '/var/run/supervisor.sock'),
+        'socket_path' => env('SUPERVISOR_SOCKET_PATH', null), // Auto-detect if null
     ],
 
     /*
