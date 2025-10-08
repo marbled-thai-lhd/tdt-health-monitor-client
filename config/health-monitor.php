@@ -1,0 +1,80 @@
+<?php
+
+return [
+    /*
+    |--------------------------------------------------------------------------
+    | Health Monitor Configuration
+    |--------------------------------------------------------------------------
+    */
+
+    // Enable/disable monitoring
+    'enabled' => env('HEALTH_MONITOR_ENABLED', false),
+
+    // Central monitoring server URL
+    'monitoring_url' => env('HEALTH_MONITOR_URL', null),
+    'backup_notification_url' => env('HEALTH_MONITOR_BACKUP_URL', null),
+
+    // API key for authentication
+    'api_key' => env('HEALTH_MONITOR_API_KEY', ''),
+
+    // Server identification
+    'server_name' => env('HEALTH_MONITOR_SERVER_NAME', gethostname()),
+    'server_ip' => env('HEALTH_MONITOR_SERVER_IP', ''),
+
+    // Monitoring frequency (in minutes)
+    'check_interval' => env('HEALTH_MONITOR_INTERVAL', 5),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Supervisor Configuration
+    |--------------------------------------------------------------------------
+    */
+    'supervisor' => [
+        'config_path' => env('SUPERVISOR_CONFIG_PATH', '/etc/supervisor/conf.d'),
+        'socket_path' => env('SUPERVISOR_SOCKET_PATH', '/var/run/supervisor.sock'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cron Configuration
+    |--------------------------------------------------------------------------
+    */
+    'cron' => [
+        'user' => env('CRON_USER', 'ec2-user'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Queue Health Check Configuration
+    |--------------------------------------------------------------------------
+    */
+    'queue_health_check' => [
+        'enabled' => env('QUEUE_HEALTH_CHECK_ENABLED', true),
+        'queues' => env('QUEUE_HEALTH_CHECK_QUEUES', 'mails,summaries,payments'),
+        'timeout' => env('QUEUE_HEALTH_CHECK_TIMEOUT', 30), // seconds
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Database Backup Configuration
+    |--------------------------------------------------------------------------
+    */
+    'backup' => [
+        'enabled' => env('DB_BACKUP_ENABLED', false),
+        'schedule' => env('DB_BACKUP_SCHEDULE', '0 2 * * *'), // Daily at 2 AM
+        's3' => [
+            'bucket' => env('DB_BACKUP_S3_BUCKET', ''),
+            'region' => env('DB_BACKUP_S3_REGION', 'us-east-1'),
+            'path' => env('DB_BACKUP_S3_PATH', 'database-backups'),
+        ],
+        'retention_days' => env('DB_BACKUP_RETENTION_DAYS', 30),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Timeout and Retry Configuration
+    |--------------------------------------------------------------------------
+    */
+    'timeout' => env('HEALTH_MONITOR_TIMEOUT', 30),
+    'retry_attempts' => env('HEALTH_MONITOR_RETRY_ATTEMPTS', 3),
+];
