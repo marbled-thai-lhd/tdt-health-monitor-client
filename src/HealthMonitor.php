@@ -28,7 +28,7 @@ class HealthMonitor
     /**
      * Perform complete health check and send report
      */
-    public function performHealthCheck(): array
+    public function performHealthCheck(bool $forceCheck = false): array
     {
         if (!$this->config['enabled']) {
             Log::info('Health monitor is disabled');
@@ -39,6 +39,7 @@ class HealthMonitor
             'server_name' => $this->config['server_name'],
             'server_ip' => $this->getServerIp(),
             'timestamp' => now()->toISOString(),
+            'force_check' => $forceCheck,
             'supervisor' => $this->checkSupervisor(),
             'cron' => $this->checkCron(),
             'queues' => $this->checkQueues(),
@@ -47,7 +48,8 @@ class HealthMonitor
         // Send report to monitoring server
         $result = $this->reportingService->sendReport($report);
         
-        Log::info('Health check completed', [
+        $logMessage = $forceCheck ? 'Force health check completed' : 'Health check completed';
+        Log::info($logMessage, [
             'report' => $report,
             'sent_successfully' => $result
         ]);

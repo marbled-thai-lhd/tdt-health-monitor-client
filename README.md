@@ -157,10 +157,40 @@ The package parses supervisor configuration files and checks process status:
 
 Monitors crontab entries for specified users:
 
-- Parses crontab using `crontab -l`
+- Parses crontab using `crontab -l` or `crontab -u {user} -l`
 - Identifies active and disabled jobs
 - Provides human-readable schedule descriptions
 - Calculates next run times
+
+#### Cron User Configuration
+
+Set the user whose crontab you want to monitor:
+
+```bash
+# Check current user's crontab (recommended)
+CRON_USER=
+
+# Check specific user's crontab (requires root privileges on Linux)
+CRON_USER=www-data
+```
+
+**Important Notes:**
+- Leave `CRON_USER` empty (or set to null) to check the current user's crontab
+- Specifying a different user requires root privileges on most Linux systems
+- On macOS, user switching may work without root privileges
+- The package automatically falls back to current user if permission is denied
+
+**Permission Examples:**
+```bash
+# ✅ Works: Current user
+CRON_USER=
+
+# ⚠️  May require root: Specific user
+CRON_USER=www-data
+
+# 🔧 Alternative: Run as root or use sudo
+sudo php artisan health:check
+```
 
 ### 3. Queue Health Monitoring
 

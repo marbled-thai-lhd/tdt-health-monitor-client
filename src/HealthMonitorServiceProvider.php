@@ -35,6 +35,9 @@ class HealthMonitorServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Load routes
+        $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+
         if ($this->app->runningInConsole()) {
             // Publish config
             $this->publishes([

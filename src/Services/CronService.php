@@ -16,26 +16,28 @@ class CronService
      */
     public function checkCronJobs(): array
     {
-        $user = $this->config['user'] ?? 'ec2-user';
+        $user = $this->config['user'] ?? null;
         
         try {
-            // Get crontab for the specified user
+            // Get crontab for the specified user or current user
             $crontab = $this->getCrontab($user);
             
             if ($crontab === false) {
+                $actualUser = $user ?? 'current user';
                 return [
                     'status' => 'error',
-                    'message' => "Unable to read crontab for user: {$user}",
-                    'jobs' => []
+                    'message' => "Unable to read crontab for user: {$actualUser}",
+                    'jobs' => [],
+                    'checked_user' => $actualUser
                 ];
             }
             
-            $jobs = $this->parseCrontab($crontab);
+            $jobs = $this->parseCrontab($crontab['content']);
             $activeJobs = array_filter($jobs, fn($job) => !$job['disabled']);
             
             return [
                 'status' => 'ok',
-                'user' => $user,
+                'user' => $crontab['user'],
                 'total_jobs' => count($jobs),
                 'active_jobs' => count($activeJobs),
                 'disabled_jobs' => count($jobs) - count($activeJobs),
@@ -47,20 +49,64 @@ class CronService
             return [
                 'status' => 'error',
                 'message' => $e->getMessage(),
-                'jobs' => []
+                'jobs' => [],
+                'checked_user' => $user ?? 'current user'
             ];
         }
     }
 
     /**
      * Get crontab content for specified user
+     * 
+     * This method tries multiple approaches to read crontab:
+     * 1. If user specified: try `crontab -u {user} -l` (requires root on most Linux systems)
+     * 2. Fallback: try current user's crontab with `crontab -l`
+     * 3. Alternative: try reading from cron spool directories (requires read permissions)
      */
-    protected function getCrontab(string $user): string|false
+    protected function getCrontab(?string $user): array|false
     {
-        $command = "crontab -u {$user} -l 2>/dev/null";
-        $output = shell_exec($command);
+        // Try different approaches based on user specification and permissions
+        $attempts = [];
         
-        return $output !== null ? $output : false;
+        if ($user) {
+            // First try with specified user (may require root privileges on Linux)
+            $attempts[] = [
+                'command' => "crontab -u {$user} -l 2>/dev/null",
+                'user' => $user,
+                'description' => "specific user ({$user})"
+            ];
+        }
+        
+        // Fallback: try current user's crontab
+        $currentUser = get_current_user();
+        $attempts[] = [
+            'command' => "crontab -l 2>/dev/null",
+            'user' => $currentUser,
+            'description' => "current user ({$currentUser})"
+        ];
+        
+        // Try to read from cron directory (requires read permissions)
+        if ($user && $user !== $currentUser) {
+            $attempts[] = [
+                'command' => "cat /var/spool/cron/crontabs/{$user} 2>/dev/null || cat /var/spool/cron/{$user} 2>/dev/null",
+                'user' => $user,
+                'description' => "cron spool directory for {$user}"
+            ];
+        }
+        
+        foreach ($attempts as $attempt) {
+            $output = shell_exec($attempt['command']);
+            
+            if ($output !== null && trim($output) !== '') {
+                return [
+                    'content' => $output,
+                    'user' => $attempt['user'],
+                    'method' => $attempt['description']
+                ];
+            }
+        }
+        
+        return false;
     }
 
     /**

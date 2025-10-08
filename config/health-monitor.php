@@ -38,9 +38,12 @@ return [
     |--------------------------------------------------------------------------
     | Cron Configuration
     |--------------------------------------------------------------------------
+    | 
+    | User: The user whose crontab to check. Leave null to check current user.
+    | Note: Checking other users' crontabs requires root privileges.
     */
     'cron' => [
-        'user' => env('CRON_USER', 'ec2-user'),
+        'user' => env('CRON_USER', null),
     ],
 
     /*
@@ -50,7 +53,7 @@ return [
     */
     'queue_health_check' => [
         'enabled' => env('QUEUE_HEALTH_CHECK_ENABLED', true),
-        'queues' => env('QUEUE_HEALTH_CHECK_QUEUES', 'mails,summaries,payments'),
+        'queues' => env('QUEUE_HEALTH_CHECK_QUEUES', ''),
         'timeout' => env('QUEUE_HEALTH_CHECK_TIMEOUT', 30), // seconds
     ],
 
