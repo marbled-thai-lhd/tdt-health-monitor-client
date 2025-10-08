@@ -1,5 +1,5 @@
 {
-    "name": "tdt/health-monitor",
+    "name": "tdt/health-monitor-client",
     "description": "Laravel package for comprehensive server health monitoring",
     "type": "library",
     "license": "MIT",
