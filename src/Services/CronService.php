@@ -186,7 +186,7 @@ class CronService
             'schedule' => $schedule,
             'schedule_string' => implode(' ', array_slice($parts, 0, 5)),
             'command' => $command,
-            'description' => $this->generateJobDescription($schedule),
+            'description' => $this->generateJobDescription($schedule, implode(' ', array_slice($parts, 0, 5))),
             'next_run' => $this->calculateNextRun($schedule)
         ];
     }
@@ -194,7 +194,7 @@ class CronService
     /**
      * Generate human-readable description of cron schedule
      */
-    protected function generateJobDescription(array $schedule): string
+    protected function generateJobDescription(array $schedule, string $scheduleString): string
     {
         $minute = $schedule['minute'];
         $hour = $schedule['hour'];
@@ -220,7 +220,7 @@ class CronService
         }
         
         // Fallback to schedule string
-        return "At {$schedule['schedule_string']}";
+        return "At {$scheduleString}";
     }
 
     /**

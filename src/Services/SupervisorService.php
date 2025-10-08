@@ -18,6 +18,7 @@ class SupervisorService
     {
         $configPath = $this->config['config_path'] ?? '/etc/supervisor/conf.d';
         $processes = [];
+        $errors = [];
 
         if (!is_dir($configPath)) {
             return [
@@ -30,31 +31,55 @@ class SupervisorService
         // Parse supervisor config files
         $configFiles = glob($configPath . '/*.conf');
         
+        if (empty($configFiles)) {
+            return [
+                'status' => 'warning',
+                'message' => "No supervisor config files found in: {$configPath}",
+                'processes' => []
+            ];
+        }
+        
         foreach ($configFiles as $configFile) {
-            $processConfigs = $this->parseConfigFile($configFile);
-            foreach ($processConfigs as $processConfig) {
-                $status = $this->checkProcessStatus($processConfig['name']);
-                $processes[] = [
-                    'name' => $processConfig['name'],
-                    'command' => $processConfig['command'] ?? '',
-                    'status' => $status['status'],
-                    'pid' => $status['pid'] ?? null,
-                    'uptime' => $status['uptime'] ?? null,
-                    'config_file' => basename($configFile)
-                ];
+            try {
+                $processConfigs = $this->parseConfigFile($configFile);
+                foreach ($processConfigs as $processConfig) {
+                    $status = $this->checkProcessStatus($processConfig['name']);
+                    $processes[] = [
+                        'name' => $processConfig['name'],
+                        'command' => $processConfig['command'] ?? '',
+                        'status' => $status['status'],
+                        'pid' => $status['pid'] ?? null,
+                        'uptime' => $status['uptime'] ?? null,
+                        'config_file' => basename($configFile)
+                    ];
+                }
+            } catch (\Exception $e) {
+                $errors[] = "Error processing " . basename($configFile) . ": " . $e->getMessage();
             }
         }
 
         $totalProcesses = count($processes);
         $runningProcesses = count(array_filter($processes, fn($p) => $p['status'] === 'RUNNING'));
 
-        return [
-            'status' => $totalProcesses > 0 ? 'ok' : 'no_processes',
+        $status = $totalProcesses > 0 ? 'ok' : 'no_processes';
+        if (!empty($errors)) {
+            $status = 'warning';
+        }
+
+        $result = [
+            'status' => $status,
             'total_processes' => $totalProcesses,
             'running_processes' => $runningProcesses,
             'stopped_processes' => $totalProcesses - $runningProcesses,
             'processes' => $processes
         ];
+        
+        if (!empty($errors)) {
+            $result['errors'] = $errors;
+            $result['message'] = 'Some config files had parsing errors: ' . implode('; ', $errors);
+        }
+        
+        return $result;
     }
 
     /**
@@ -62,27 +87,44 @@ class SupervisorService
      */
     protected function parseConfigFile(string $filePath): array
     {
-        $content = file_get_contents($filePath);
-        $processes = [];
-        
-        // Parse INI-style config
-        $sections = parse_ini_string($content, true);
-        
-        foreach ($sections as $sectionName => $sectionData) {
-            if (strpos($sectionName, 'program:') === 0) {
-                $processName = str_replace('program:', '', $sectionName);
-                $processes[] = [
-                    'name' => $processName,
-                    'command' => $sectionData['command'] ?? '',
-                    'directory' => $sectionData['directory'] ?? '',
-                    'user' => $sectionData['user'] ?? '',
-                    'autostart' => $sectionData['autostart'] ?? 'true',
-                    'autorestart' => $sectionData['autorestart'] ?? 'true',
-                ];
+        try {
+            $content = file_get_contents($filePath);
+            
+            if ($content === false) {
+                return [];
             }
+            
+            $processes = [];
+            
+            // Parse INI-style config with error handling
+            $sections = @parse_ini_string($content, true);
+            
+            if ($sections === false) {
+                // If parse_ini_string fails, try manual parsing
+                return $this->manualParseConfig($content, $filePath);
+            }
+            
+            foreach ($sections as $sectionName => $sectionData) {
+                if (strpos($sectionName, 'program:') === 0) {
+                    $processName = str_replace('program:', '', $sectionName);
+                    $processes[] = [
+                        'name' => $processName,
+                        'command' => $sectionData['command'] ?? '',
+                        'directory' => $sectionData['directory'] ?? '',
+                        'user' => $sectionData['user'] ?? '',
+                        'autostart' => $sectionData['autostart'] ?? 'true',
+                        'autorestart' => $sectionData['autorestart'] ?? 'true',
+                    ];
+                }
+            }
+            
+            return $processes;
+            
+        } catch (\Exception $e) {
+            // Log error and return empty array to continue processing other files
+            error_log("Error parsing supervisor config file {$filePath}: " . $e->getMessage());
+            return [];
         }
-        
-        return $processes;
     }
 
     /**
@@ -134,5 +176,76 @@ class SupervisorService
         }
         
         return $status;
+    }
+
+    /**
+     * Manual parsing fallback for problematic config files
+     */
+    protected function manualParseConfig(string $content, string $filePath): array
+    {
+        $processes = [];
+        $lines = explode("\n", $content);
+        $currentSection = null;
+        $currentData = [];
+        
+        foreach ($lines as $lineNumber => $line) {
+            $line = trim($line);
+            
+            // Skip empty lines and comments
+            if (empty($line) || $line[0] === ';' || $line[0] === '#') {
+                continue;
+            }
+            
+            // Check for section headers
+            if (preg_match('/^\[(.*)\]$/', $line, $matches)) {
+                // Save previous section if it was a program
+                if ($currentSection && strpos($currentSection, 'program:') === 0) {
+                    $processName = str_replace('program:', '', $currentSection);
+                    $processes[] = [
+                        'name' => $processName,
+                        'command' => $currentData['command'] ?? '',
+                        'directory' => $currentData['directory'] ?? '',
+                        'user' => $currentData['user'] ?? '',
+                        'autostart' => $currentData['autostart'] ?? 'true',
+                        'autorestart' => $currentData['autorestart'] ?? 'true',
+                    ];
+                }
+                
+                $currentSection = $matches[1];
+                $currentData = [];
+                continue;
+            }
+            
+            // Parse key=value pairs
+            if (strpos($line, '=') !== false) {
+                list($key, $value) = explode('=', $line, 2);
+                $key = trim($key);
+                $value = trim($value);
+                
+                // Remove quotes if present
+                if (strlen($value) >= 2 && 
+                    (($value[0] === '"' && $value[-1] === '"') || 
+                     ($value[0] === "'" && $value[-1] === "'"))) {
+                    $value = substr($value, 1, -1);
+                }
+                
+                $currentData[$key] = $value;
+            }
+        }
+        
+        // Don't forget the last section
+        if ($currentSection && strpos($currentSection, 'program:') === 0) {
+            $processName = str_replace('program:', '', $currentSection);
+            $processes[] = [
+                'name' => $processName,
+                'command' => $currentData['command'] ?? '',
+                'directory' => $currentData['directory'] ?? '',
+                'user' => $currentData['user'] ?? '',
+                'autostart' => $currentData['autostart'] ?? 'true',
+                'autorestart' => $currentData['autorestart'] ?? 'true',
+            ];
+        }
+        
+        return $processes;
     }
 }
