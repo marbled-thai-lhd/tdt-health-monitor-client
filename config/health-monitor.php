@@ -75,6 +75,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Logging Configuration
+    |--------------------------------------------------------------------------
+    */
+    'logging' => [
+        'enabled' => env('HEALTH_MONITOR_LOGGING_ENABLED', true),
+        'health_check' => [
+            'enabled' => env('HEALTH_LOG_ENABLED', true),
+            'path' => env('HEALTH_LOG_PATH', storage_path('logs/health-check.log')),
+            'level' => env('HEALTH_LOG_LEVEL', 'info'),
+            'daily' => env('HEALTH_LOG_DAILY', true),
+            'days' => env('HEALTH_LOG_DAILY_DAYS', 30),
+        ],
+        'database_backup' => [
+            'enabled' => env('BACKUP_LOG_ENABLED', true),
+            'path' => env('BACKUP_LOG_PATH', storage_path('logs/database-backup.log')),
+            'level' => env('BACKUP_LOG_LEVEL', 'info'),
+            'daily' => env('BACKUP_LOG_DAILY', true),
+            'days' => env('BACKUP_LOG_DAILY_DAYS', 30),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Timeout and Retry Configuration
     |--------------------------------------------------------------------------
     */

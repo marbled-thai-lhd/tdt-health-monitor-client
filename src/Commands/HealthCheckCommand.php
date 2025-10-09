@@ -6,10 +6,13 @@ use TDT\HealthMonitor\HealthMonitor;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use TDT\HealthMonitor\Traits\HealthMonitorLogging;
+use TDT\HealthMonitor\Services\ClientLoggingService;
 
 class HealthCheckCommand extends Command
 {
     use HealthMonitorLogging;
+
+    protected ClientLoggingService $logger;
     /**
      * The name and signature of the console command.
      */
@@ -28,35 +31,25 @@ class HealthCheckCommand extends Command
     public function handle(): int
     {
         $startTime = microtime(true);
+        
+        // Initialize client logging service
+        $this->logger = new ClientLoggingService(config('health-monitor'));
 
         try {
-            Log::channel('health-check')->info('Health check command started', [
-                'timestamp' => now()->toISOString(),
+            // Log command start
+            $this->logger->logHealthCheckStart([
                 'force' => $this->option('force'),
-                'output_format' => $this->option('output'),
+                'output' => $this->option('output'),
             ]);
 
             if (!config('health-monitor.enabled') && !$this->option('force')) {
                 $this->warn('Health monitor is disabled. Use --force to run anyway.');
-                
-                Log::channel('health-check')->warning('Health check skipped - disabled', [
-                    'timestamp' => now()->toISOString(),
-                    'forced' => false,
-                    'enabled' => false
-                ]);
-                
                 return self::FAILURE;
             }
 
             $config = config('health-monitor');
             if (!$config) {
                 $this->error('Health monitor configuration not found. Please publish the config first.');
-                
-                Log::channel('health-check')->error('Health check failed - no config', [
-                    'timestamp' => now()->toISOString(),
-                    'error' => 'Configuration not found'
-                ]);
-                
                 return self::FAILURE;
             }
 
@@ -65,7 +58,8 @@ class HealthCheckCommand extends Command
 
             $duration = round((microtime(true) - $startTime) * 1000);
 
-            $this->logHealthCheckSummary($report, $duration, true);
+            // Log successful completion
+            $this->logger->logHealthCheckComplete($report, $duration, true);
 
             if ($this->option('output') === 'table') {
                 $this->displayTableOutput($report);
@@ -73,28 +67,14 @@ class HealthCheckCommand extends Command
                 $this->displayJsonOutput($report);
             }
 
-            Log::channel('health-check')->info('Health check command completed successfully', [
-                'timestamp' => now()->toISOString(),
-                'duration_ms' => $duration,
-                'output_format' => $this->option('output'),
-            ]);
-
             $this->info('Health check completed successfully.');
             return self::SUCCESS;
 
         } catch (\Exception $e) {
             $duration = round((microtime(true) - $startTime) * 1000);
 
-            $this->logHealthCheckSummary([], $duration, false);
-
-            Log::channel('health-check')->error('Health check command failed', [
-                'timestamp' => now()->toISOString(),
-                'duration_ms' => $duration,
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+            // Log error
+            $this->logger->logHealthCheckError($e, $duration);
 
             $this->error("Health check failed: " . $e->getMessage());
             return self::FAILURE;
