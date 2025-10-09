@@ -1,10 +1,10 @@
 <?php
 
-namespace DuyThai\HealthMonitor\Services;
+namespace TDT\HealthMonitor\Services;
 
 use Aws\S3\S3Client;
 use Aws\Exception\AwsException;
-use DuyThai\HealthMonitor\Services\ReportingService;
+use TDT\HealthMonitor\Services\ReportingService;
 use Illuminate\Support\Facades\Log;
 
 class DatabaseBackupService
