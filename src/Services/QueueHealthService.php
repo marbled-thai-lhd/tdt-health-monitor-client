@@ -28,12 +28,12 @@ class QueueHealthService
             $results[$queueName] = $this->checkSingleQueue($queueName, $timeout);
         }
 
-        $healthyQueues = count(array_filter($results, fn($r) => $r['status'] === 'healthy'));
+        $healthyQueues = count(array_filter($results, fn($r) => $r['status'] === 'ok'));
         $totalQueues = count($results);
 
         return [
-            'status' => $healthyQueues === $totalQueues ? 'healthy' : 'unhealthy',
-            'healthy_queues' => $healthyQueues,
+            'status' => $healthyQueues === $totalQueues ? 'ok' : 'error',
+            'ok_queues' => $healthyQueues,
             'total_queues' => $totalQueues,
             'queues' => $results,
             'checked_at' => now()->toISOString()
@@ -60,7 +60,7 @@ class QueueHealthService
                     Cache::forget($cacheKey);
                     
                     return [
-                        'status' => 'healthy',
+                        'status' => 'ok',
                         'response_time' => $result['processed_at'] - $result['dispatched_at'],
                         'processed_at' => $result['processed_at'],
                         'test_id' => $testId

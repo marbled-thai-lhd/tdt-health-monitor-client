@@ -121,12 +121,12 @@ class HealthCheckCommand extends Command
             $this->newLine();
             $this->info('Queue Health:');
             
-            if ($queues['status'] === 'healthy') {
-                $this->line("  Status: Healthy");
-                $this->line("  Healthy Queues: {$queues['healthy_queues']}/{$queues['total_queues']}");
+            if ($queues['status'] === 'ok') {
+                $this->line("  Status: OK");
+                $this->line("  OK Queues: {$queues['ok_queues']}/{$queues['total_queues']}");
             } else {
                 $this->error("  Status: {$queues['status']}");
-                $this->line("  Healthy Queues: {$queues['healthy_queues']}/{$queues['total_queues']}");
+                $this->line("  OK Queues: {$queues['ok_queues']}/{$queues['total_queues']}");
             }
         }
     }

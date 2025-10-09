@@ -296,13 +296,13 @@ This prevents the security vulnerability where an attacker could reuse an old Au
       "jobs": [...]
     },
     "queues": {
-      "status": "healthy",
-      "healthy_queues": 3,
+      "status": "ok",
+      "ok_queues": 3,
       "total_queues": 3,
       "queues": {
-        "mails": {"status": "healthy", "response_time": 1.2},
-        "summaries": {"status": "healthy", "response_time": 0.8},
-        "payments": {"status": "healthy", "response_time": 1.5}
+        "mails": {"status": "ok", "response_time": 1.2},
+        "summaries": {"status": "ok", "response_time": 0.8},
+        "payments": {"status": "ok", "response_time": 1.5}
       }
     }
   },
