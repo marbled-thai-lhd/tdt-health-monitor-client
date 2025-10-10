@@ -19,7 +19,10 @@ class HealthMonitor
     public function __construct(array $config)
     {
         $this->config = $config;
-        $this->supervisorService = new SupervisorService($config['supervisor'] ?? []);
+		$configQueues = $config['queue_health_check']['queues'] ?? [];
+		$configSupervisor = $config['supervisor'] ?? [];
+		$configSupervisor['queues'] = $configQueues;
+        $this->supervisorService = new SupervisorService($configSupervisor);
         $this->cronService = new CronService($config['cron'] ?? []);
         $this->queueHealthService = new QueueHealthService($config['queue_health_check'] ?? []);
         $this->reportingService = new ReportingService($config);
