@@ -61,7 +61,27 @@ class SupervisorService
         $totalProcesses = count($processes);
         $runningProcesses = count(array_filter($processes, fn($p) => $p['status'] === 'RUNNING'));
 
-        $status = $totalProcesses > 0 ? 'ok' : 'no_processes';
+        // Get queues that need to be checked
+        $requiredQueues = $this->getQueues();
+        
+        // Filter running processes and get unique queue names
+        $runningProcessNames = array_filter($processes, fn($p) => $p['status'] === 'RUNNING');
+        $runningQueueNames = array_unique(array_map(fn($p) => $p['name'], $runningProcessNames));
+        
+        // Check if all required queues are running
+        $runningQueueCount = count($runningQueueNames);
+        $requiredQueueCount = count($requiredQueues);
+        
+        // Determine status based on queue comparison
+        if ($runningQueueCount < $requiredQueueCount) {
+            $status = 'error';
+            $missingQueues = array_diff($requiredQueues, $runningQueueNames);
+        } elseif ($runningProcesses < $totalProcesses) {
+            $status = 'warning';
+        } else {
+            $status = 'ok';
+        }
+        
         if (!empty($errors)) {
             $status = 'warning';
         }
@@ -71,15 +91,40 @@ class SupervisorService
             'total_processes' => $totalProcesses,
             'running_processes' => $runningProcesses,
             'stopped_processes' => $totalProcesses - $runningProcesses,
+            'required_queues' => $requiredQueues,
+            'running_queues' => array_values($runningQueueNames),
+            'running_queue_count' => $runningQueueCount,
+            'required_queue_count' => $requiredQueueCount,
             'processes' => $processes
         ];
         
+        // Add specific error message for missing queues
+        if (isset($missingQueues) && !empty($missingQueues)) {
+            $result['missing_queues'] = array_values($missingQueues);
+            $result['message'] = 'Required queues not running: ' . implode(', ', $missingQueues);
+        }
+        
         if (!empty($errors)) {
             $result['errors'] = $errors;
-            $result['message'] = 'Some config files had parsing errors: ' . implode('; ', $errors);
+            if (isset($result['message'])) {
+                $result['message'] .= '; Config parsing errors: ' . implode('; ', $errors);
+            } else {
+                $result['message'] = 'Some config files had parsing errors: ' . implode('; ', $errors);
+            }
         }
         
         return $result;
+    }
+
+	protected function getQueues(): array
+    {
+        $queuesConfig = $this->config['queues'] ?? 'default';
+        
+        if (is_string($queuesConfig)) {
+            return array_map('trim', explode(',', $queuesConfig));
+        }
+        
+        return is_array($queuesConfig) ? $queuesConfig : ['default'];
     }
 
     /**
