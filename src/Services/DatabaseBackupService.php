@@ -46,12 +46,17 @@ class DatabaseBackupService
             $fileSize = filesize($zipPath);
             $duration = round(microtime(true) - $startTime, 2);
             
+            // Check if backup is password protected
+            $dbConfig = config('database.connections.' . config('database.default'));
+            $isEncrypted = !empty($dbConfig['password']);
+            
             $result = [
                 'file_path' => $zipPath,
                 'file_size' => $fileSize,
                 'duration' => $duration,
                 'timestamp' => date('c'),
-                'uploaded' => false
+                'uploaded' => false,
+                'encrypted' => $isEncrypted
             ];
 
             if ($upload && $this->shouldUploadToS3()) {
@@ -116,21 +121,43 @@ class DatabaseBackupService
     }
 
     /**
-     * Compress backup file
+     * Compress backup file with password protection
      */
     protected function compressBackup(string $sqlPath): string
     {
         $zipPath = str_replace('.sql', '.zip', $sqlPath);
         
-        $zip = new \ZipArchive();
-        $result = $zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        // Get database password to use as zip password
+        $dbConfig = config('database.connections.' . config('database.default'));
+        $password = $dbConfig['password'];
         
-        if ($result !== true) {
-            throw new \Exception("Failed to create ZIP file: {$result}");
+        // Use command line zip with password encryption
+        if (!empty($password)) {
+            $command = sprintf(
+                'cd %s && zip -P %s %s %s 2>&1',
+                escapeshellarg(dirname($sqlPath)),
+                escapeshellarg($password),
+                escapeshellarg(basename($zipPath)),
+                escapeshellarg(basename($sqlPath))
+            );
+            
+            exec($command, $output, $returnCode);
+            
+            if ($returnCode !== 0) {
+                throw new \Exception('ZIP compression with password failed: ' . implode("\n", $output));
+            }
+        } else {
+            // Fallback to ZipArchive without password if no DB password
+            $zip = new \ZipArchive();
+            $result = $zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+            
+            if ($result !== true) {
+                throw new \Exception("Failed to create ZIP file: {$result}");
+            }
+            
+            $zip->addFile($sqlPath, basename($sqlPath));
+            $zip->close();
         }
-        
-        $zip->addFile($sqlPath, basename($sqlPath));
-        $zip->close();
         
         if (!file_exists($zipPath)) {
             throw new \Exception('Failed to create compressed backup file');
