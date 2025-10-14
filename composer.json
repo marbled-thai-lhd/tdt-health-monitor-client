@@ -2,7 +2,7 @@
     "name": "tdt/health-monitor-client",
     "description": "Laravel package for comprehensive server health monitoring",
     "type": "library",
-    "license": "MIT",
+    "license": "proprietary",
     "autoload": {
         "psr-4": {
             "TDT\\HealthMonitor\\": "src/"
