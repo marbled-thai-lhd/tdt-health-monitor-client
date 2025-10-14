@@ -3,7 +3,11 @@
 # Laravel Health Monitor
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/tdt/health-monitor.svg?style=flat-square)](https://packagist.org/packages/tdt/health-monitor)
-[![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square)](LICENSE.md)
+[![Software License](https://img.shields.io/badge/license-Proprietary-red.svg?style=flat-square)](#license)
+
+> **⚠️ PROPRIETARY SOFTWARE - PERMISSION REQUIRED**  
+> This is proprietary software. Usage requires prior written permission from the copyright holder.  
+> See [License](#license) section below for details.
 
 A comprehensive Laravel package for monitoring supervisor processes, cron jobs, queue health, and automated database backups with reporting to a central monitoring server.
 
@@ -367,11 +371,24 @@ Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
 
 ## Security
 
-If you discover any security-related issues, please email security@example.com instead of using the issue tracker.
+If you discover any security-related issues, please email duythai1912@gmail.com instead of using the issue tracker.
 
 ## License
 
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+This software is **proprietary** and is the exclusive property of the copyright holder.
+
+**All rights reserved.** No part of this software may be used, copied, modified, distributed, or transmitted in any form or by any means without prior written permission from the owner.
+
+### Usage Requirements
+
+- ✋ **Permission Required**: You must obtain written permission before using this software
+- 🚫 **No Redistribution**: Redistribution in any form is strictly prohibited
+- 📝 **No Modification**: Modification without authorization is not allowed
+- 💼 **Commercial Use**: Requires separate commercial license agreement
+
+For licensing inquiries and permission requests, please contact: duythai1912@gmail.com
+
+© 2025. All Rights Reserved.
 
 ## Changelog
 
