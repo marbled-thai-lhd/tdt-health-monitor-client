@@ -59,6 +59,7 @@ class HealthCheckCommand extends Command
             $duration = round((microtime(true) - $startTime) * 1000);
 
             // Log successful completion
+			$this->logger->getHealthLogger()->info('FullLog', $report);
             $this->logger->logHealthCheckComplete($report, $duration, true);
 
             if ($this->option('output') === 'table') {
