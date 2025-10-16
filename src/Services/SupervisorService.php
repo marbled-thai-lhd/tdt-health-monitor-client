@@ -185,21 +185,27 @@ class SupervisorService
                 $socketPath = $this->findSocketPath();
             }
             
+            // Find supervisorctl executable path
+            $supervisorctl = $this->findSupervisorctl();
+            
             // Check if socket exists, if not use default supervisorctl
             if ($socketPath && file_exists($socketPath)) {
-                $command = "supervisorctl -s unix://{$socketPath} status {$processName}";
+                $command = "{$supervisorctl} -s unix://{$socketPath} status {$processName} 2>&1";
             } else {
                 // Fallback to default supervisorctl without socket
-                $command = "supervisorctl status {$processName}";
+                $command = "{$supervisorctl} status {$processName} 2>&1";
             }
             
-            $output = shell_exec($command);
+            $output = [];
+            $returnCode = 0;
+            exec($command, $output, $returnCode);
+            $outputString = implode("\n", $output);
             
-            if ($output === null) {
-                return ['status' => 'UNKNOWN', 'error' => 'Unable to execute supervisorctl'];
+            if (empty($outputString)) {
+                return ['status' => 'UNKNOWN', 'error' => 'Unable to execute supervisorctl or no output returned'];
             }
             
-            $trimmedOutput = trim($output);
+            $trimmedOutput = trim($outputString);
             
             // Check for error messages
             if (stripos($trimmedOutput, 'no such file') !== false || 
@@ -336,5 +342,34 @@ class SupervisorService
         }
 
         return null;
+    }
+
+    /**
+     * Find supervisorctl executable path
+     */
+    protected function findSupervisorctl(): string
+    {
+        // Try to find supervisorctl in common locations
+        $possiblePaths = [
+            '/usr/local/bin/supervisorctl',           // Common Linux location
+            '/usr/bin/supervisorctl',                 // Alternative Linux location
+            '/opt/homebrew/bin/supervisorctl',        // Homebrew on Apple Silicon
+            '/usr/local/opt/supervisor/bin/supervisorctl', // Homebrew Intel Mac
+        ];
+
+        foreach ($possiblePaths as $path) {
+            if (file_exists($path) && is_executable($path)) {
+                return $path;
+            }
+        }
+
+        // Try to find via which command
+        $which = trim(shell_exec('which supervisorctl 2>/dev/null') ?? '');
+        if (!empty($which) && file_exists($which)) {
+            return $which;
+        }
+
+        // Fallback to just 'supervisorctl' and hope it's in PATH
+        return 'supervisorctl';
     }
 }
