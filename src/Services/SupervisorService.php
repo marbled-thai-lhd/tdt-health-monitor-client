@@ -28,8 +28,8 @@ class SupervisorService
             ];
         }
 
-        // Parse supervisor config files
-        $configFiles = glob($configPath . '/*.conf');
+        // Parse supervisor config files, accepting .conf .ini
+        $configFiles = glob($configPath . '/*.{conf,ini}', GLOB_BRACE);
         
         if (empty($configFiles)) {
             return [
