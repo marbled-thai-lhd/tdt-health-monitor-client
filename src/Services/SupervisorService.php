@@ -111,16 +111,41 @@ class SupervisorService
                     }
 
                     $status = $this->checkProcessStatus($processConfig['name']);
-                    $processes[] = [
+                    
+                    $processInfo = [
                         'name' => $processConfig['name'],
                         'command' => $processConfig['command'] ?? '',
                         'status' => $status['status'],
-                        'pid' => $status['pid'] ?? null,
-                        'uptime' => $status['uptime'] ?? null,
                         'config_file' => basename($configFile),
                         'directory' => $processConfig['directory'] ?? '',
                         'project_filtered' => true
                     ];
+                    
+                    // Add process-specific information
+                    if (isset($status['pid'])) {
+                        $processInfo['pid'] = $status['pid'];
+                    }
+                    
+                    if (isset($status['uptime'])) {
+                        $processInfo['uptime'] = $status['uptime'];
+                    }
+                    
+                    // Add process group information if available
+                    if (isset($status['process_group'])) {
+                        $processInfo['process_group'] = $status['process_group'];
+                        $processInfo['running_count'] = $status['running_count'];
+                        $processInfo['total_count'] = $status['total_count'];
+                        
+                        if (isset($status['pids'])) {
+                            $processInfo['pids'] = $status['pids'];
+                        }
+                        
+                        if (isset($status['uptimes'])) {
+                            $processInfo['uptimes'] = $status['uptimes'];
+                        }
+                    }
+                    
+                    $processes[] = $processInfo;
                 }
             } catch (\Exception $e) {
                 $errors[] = "Error processing " . basename($configFile) . ": " . $e->getMessage();
@@ -128,13 +153,18 @@ class SupervisorService
         }
 
         $totalProcesses = count($processes);
-        $runningProcesses = count(array_filter($processes, fn($p) => $p['status'] === 'RUNNING'));
+        $runningProcesses = count(array_filter($processes, function($p) {
+            return $p['status'] === 'RUNNING' || $p['status'] === 'PARTIAL';
+        }));
+        $fullyRunningProcesses = count(array_filter($processes, fn($p) => $p['status'] === 'RUNNING'));
 
         // Get queues that need to be checked
         $requiredQueues = $this->getQueues();
         
         // Filter running processes and get unique queue names
-        $runningProcessNames = array_filter($processes, fn($p) => $p['status'] === 'RUNNING');
+        $runningProcessNames = array_filter($processes, function($p) {
+            return $p['status'] === 'RUNNING' || $p['status'] === 'PARTIAL';
+        });
         $runningQueueNames = array_unique(array_map(fn($p) => $p['name'], $runningProcessNames));
         
         // Check if all required queues are running
@@ -145,7 +175,7 @@ class SupervisorService
         if ($runningQueueCount < $requiredQueueCount) {
             $status = 'error';
             $missingQueues = array_diff($requiredQueues, $runningQueueNames);
-        } elseif ($runningProcesses < $totalProcesses) {
+        } elseif ($fullyRunningProcesses < $totalProcesses) {
             $status = 'warning';
         } else {
             $status = 'ok';
@@ -159,6 +189,7 @@ class SupervisorService
             'status' => $status,
             'total_processes' => $totalProcesses,
             'running_processes' => $runningProcesses,
+            'fully_running_processes' => $fullyRunningProcesses,
             'stopped_processes' => $totalProcesses - $runningProcesses,
             'required_queues' => $requiredQueues,
             'running_queues' => array_values($runningQueueNames),
@@ -270,33 +301,43 @@ class SupervisorService
             // Find supervisorctl executable path
             $supervisorctl = $this->findSupervisorctl();
             
-            // Check if socket exists, if not use default supervisorctl
+            // Try multiple commands to get process status
+            $commands = [];
+            
             if ($socketPath && file_exists($socketPath)) {
-                $command = "{$supervisorctl} -s unix://{$socketPath} status {$processName}:* 2>&1";
+                $commands[] = "{$supervisorctl} -s unix://{$socketPath} status {$processName}:* 2>&1";
+                $commands[] = "{$supervisorctl} -s unix://{$socketPath} status {$processName} 2>&1";
             } else {
-                // Fallback to default supervisorctl without socket
-                $command = "{$supervisorctl} status {$processName}:* 2>&1";
+                $commands[] = "{$supervisorctl} status {$processName}:* 2>&1";
+                $commands[] = "{$supervisorctl} status {$processName} 2>&1";
             }
             
-            $output = [];
-            $returnCode = 0;
-            exec($command, $output, $returnCode);
-            $outputString = implode("\n", $output);
-            
-            if (empty($outputString)) {
-                return ['status' => 'UNKNOWN', 'error' => 'Unable to execute supervisorctl or no output returned'];
+            foreach ($commands as $command) {
+                $output = [];
+                $returnCode = 0;
+                exec($command, $output, $returnCode);
+                $outputString = implode("\n", $output);
+                
+                if (!empty($outputString)) {
+                    $trimmedOutput = trim($outputString);
+                    
+                    // Skip if it's an error about no such process
+                    if (stripos($trimmedOutput, 'no such process') !== false || 
+                        stripos($trimmedOutput, 'no such file') !== false) {
+                        continue;
+                    }
+                    
+                    // Check for other error messages
+                    if (stripos($trimmedOutput, 'error') !== false ||
+                        stripos($trimmedOutput, 'failed') !== false) {
+                        continue;
+                    }
+                    
+                    return $this->parseStatusOutput($trimmedOutput);
+                }
             }
             
-            $trimmedOutput = trim($outputString);
-            
-            // Check for error messages
-            if (stripos($trimmedOutput, 'no such file') !== false || 
-                stripos($trimmedOutput, 'error') !== false ||
-                stripos($trimmedOutput, 'failed') !== false) {
-                return ['status' => 'ERROR', 'error' => $trimmedOutput];
-            }
-            
-            return $this->parseStatusOutput($trimmedOutput);
+            return ['status' => 'UNKNOWN', 'error' => 'Unable to execute supervisorctl or no output returned'];
             
         } catch (\Exception $e) {
             return ['status' => 'ERROR', 'error' => $e->getMessage()];
@@ -308,30 +349,109 @@ class SupervisorService
      */
     protected function parseStatusOutput(string $output): array
     {
+        // Handle multiple processes (when using :* syntax)
+        $lines = array_filter(explode("\n", $output), fn($line) => !empty(trim($line)));
+        
+        if (empty($lines)) {
+            return ['status' => 'UNKNOWN'];
+        }
+        
+        // If multiple processes, aggregate the status
+        if (count($lines) > 1) {
+            return $this->parseMultipleProcessStatus($lines);
+        }
+        
+        // Single process
+        return $this->parseSingleProcessStatus($lines[0]);
+    }
+    
+    /**
+     * Parse single process status line
+     */
+    protected function parseSingleProcessStatus(string $line): array
+    {
         // Example output: "process_name RUNNING pid 1234, uptime 1:23:45"
         // Real output: aripla-mail-queue                RUNNING   pid 88456, uptime 0:17:21
+        // Group output: aripla-queue-update-status-worker:aripla-queue-update-status-worker_00   RUNNING   pid 627681, uptime 0:45:46
         
-        $parts = preg_split('/\s+/', $output);
+        $parts = preg_split('/\s+/', trim($line));
         
         if (count($parts) < 2) {
             return ['status' => 'UNKNOWN'];
         }
         
         $status = [
-            'status' => $parts[1] ?? 'UNKNOWN'
+            'status' => $parts[1] ?? 'UNKNOWN',
+            'process_line' => $line
         ];
         
         // Extract PID if running
-        if (preg_match('/pid (\d+)/', $output, $matches)) {
+        if (preg_match('/pid (\d+)/', $line, $matches)) {
             $status['pid'] = (int)$matches[1];
         }
         
         // Extract uptime if running
-        if (preg_match('/uptime ([0-9:]+)/', $output, $matches)) {
+        if (preg_match('/uptime ([0-9:]+)/', $line, $matches)) {
             $status['uptime'] = $matches[1];
         }
         
         return $status;
+    }
+    
+    /**
+     * Parse multiple process status lines (for process groups)
+     */
+    protected function parseMultipleProcessStatus(array $lines): array
+    {
+        $runningCount = 0;
+        $totalCount = count($lines);
+        $statuses = [];
+        $pids = [];
+        $uptimes = [];
+        
+        foreach ($lines as $line) {
+            $processStatus = $this->parseSingleProcessStatus($line);
+            $statuses[] = $processStatus['status'];
+            
+            if ($processStatus['status'] === 'RUNNING') {
+                $runningCount++;
+                
+                if (isset($processStatus['pid'])) {
+                    $pids[] = $processStatus['pid'];
+                }
+                
+                if (isset($processStatus['uptime'])) {
+                    $uptimes[] = $processStatus['uptime'];
+                }
+            }
+        }
+        
+        // Determine overall status
+        if ($runningCount === $totalCount) {
+            $overallStatus = 'RUNNING';
+        } elseif ($runningCount > 0) {
+            $overallStatus = 'PARTIAL'; // Some running, some not
+        } else {
+            $overallStatus = 'STOPPED';
+        }
+        
+        $result = [
+            'status' => $overallStatus,
+            'running_count' => $runningCount,
+            'total_count' => $totalCount,
+            'process_group' => true
+        ];
+        
+        if (!empty($pids)) {
+            $result['pids'] = $pids;
+        }
+        
+        if (!empty($uptimes)) {
+            $result['uptimes'] = $uptimes;
+            $result['uptime'] = $uptimes[0]; // Use first process uptime for backward compatibility
+        }
+        
+        return $result;
     }
 
     /**
