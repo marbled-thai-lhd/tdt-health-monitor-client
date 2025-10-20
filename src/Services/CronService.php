@@ -12,6 +12,63 @@ class CronService
     }
 
     /**
+     * Get current Laravel application path for filtering
+     */
+    protected function getApplicationPath(): string
+    {
+        // Get Laravel base path
+        if (function_exists('base_path')) {
+            return realpath(base_path()) ?: base_path();
+        }
+        
+        // Fallback: try to detect from current working directory
+        $cwd = getcwd();
+        if ($cwd && file_exists($cwd . '/artisan')) {
+            return $cwd;
+        }
+        
+        // Another fallback: check parent directories for Laravel
+        $path = __DIR__;
+        while ($path !== '/' && $path !== '') {
+            if (file_exists($path . '/artisan') || file_exists($path . '/bootstrap/app.php')) {
+                return $path;
+            }
+            $path = dirname($path);
+        }
+        
+        return '';
+    }
+
+    /**
+     * Check if a cron job belongs to this project
+     */
+    protected function belongsToProject(array $job): bool
+    {
+        $projectPath = $this->getApplicationPath();
+        if (!$projectPath) {
+            return true; // Can't detect project path, include all
+        }
+
+        // Check command for project path
+        if (stripos($job['command'], $projectPath) !== false) {
+            return true;
+        }
+
+        // Check original line for project path (might contain comments)
+        if (isset($job['original_line']) && stripos($job['original_line'], $projectPath) !== false) {
+            return true;
+        }
+
+        // Check if command contains project folder name
+        $projectName = basename($projectPath);
+        if (stripos($job['command'], $projectName) !== false) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Check cron jobs for specified user
      */
     public function checkCronJobs(): array
@@ -32,7 +89,10 @@ class CronService
                 ];
             }
             
-            $jobs = $this->parseCrontab($crontab['content']);
+            $allJobs = $this->parseCrontab($crontab['content']);
+            
+            // Filter jobs by project if enabled
+            $jobs = array_filter($allJobs, fn($job) => $this->belongsToProject($job));
             $activeJobs = array_filter($jobs, fn($job) => !$job['disabled']);
             
             return [
@@ -41,7 +101,10 @@ class CronService
                 'total_jobs' => count($jobs),
                 'active_jobs' => count($activeJobs),
                 'disabled_jobs' => count($jobs) - count($activeJobs),
-                'jobs' => $jobs,
+                'jobs' => array_values($jobs), // Re-index array after filtering
+                'all_jobs_count' => count($allJobs), // Total before filtering
+                'project_path' => $this->getApplicationPath(),
+                'project_filter_enabled' => !empty($this->getApplicationPath()),
                 'last_checked' => date('Y-m-d H:i:s')
             ];
             
@@ -142,7 +205,7 @@ class CronService
             if ($job) {
                 $job['line_number'] = $lineNumber + 1;
                 $job['disabled'] = $disabled;
-                $job['original_line'] = $line;
+                $job['original_line'] = $disabled ? '#' . $line : $line;
                 $jobs[] = $job;
             }
         }

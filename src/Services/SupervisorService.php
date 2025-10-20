@@ -12,6 +12,68 @@ class SupervisorService
     }
 
     /**
+     * Get current Laravel application path for filtering
+     */
+    protected function getApplicationPath(): string
+    {
+        // Get Laravel base path
+        if (function_exists('base_path')) {
+            return realpath(base_path()) ?: base_path();
+        }
+        
+        // Fallback: try to detect from current working directory
+        $cwd = getcwd();
+        if ($cwd && file_exists($cwd . '/artisan')) {
+            return $cwd;
+        }
+        
+        // Another fallback: check parent directories for Laravel
+        $path = __DIR__;
+        while ($path !== '/' && $path !== '') {
+            if (file_exists($path . '/artisan') || file_exists($path . '/bootstrap/app.php')) {
+                return $path;
+            }
+            $path = dirname($path);
+        }
+        
+        return '';
+    }
+
+    /**
+     * Check if a process belongs to this project
+     */
+    protected function belongsToProject(array $processConfig, string $configFile): bool
+    {
+        $projectPath = $this->getApplicationPath();
+        if (!$projectPath) {
+            return true; // Can't detect project path, include all
+        }
+
+        // Check command for project path
+        if (stripos($processConfig['command'] ?? '', $projectPath) !== false) {
+            return true;
+        }
+
+        // Check directory for project path
+        if (stripos($processConfig['directory'] ?? '', $projectPath) !== false) {
+            return true;
+        }
+
+        // Check if process name contains project folder name
+        $projectName = basename($projectPath);
+        if (stripos($processConfig['name'], $projectName) !== false) {
+            return true;
+        }
+
+        // Check config file name for project name
+        if (stripos($configFile, $projectName) !== false) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Check supervisor processes by parsing config files
      */
     public function checkProcesses(): array
@@ -43,6 +105,11 @@ class SupervisorService
             try {
                 $processConfigs = $this->parseConfigFile($configFile);
                 foreach ($processConfigs as $processConfig) {
+                    // Filter processes by project if enabled
+                    if (!$this->belongsToProject($processConfig, $configFile)) {
+                        continue; // Skip processes that don't belong to this project
+                    }
+
                     $status = $this->checkProcessStatus($processConfig['name']);
                     $processes[] = [
                         'name' => $processConfig['name'],
@@ -50,7 +117,9 @@ class SupervisorService
                         'status' => $status['status'],
                         'pid' => $status['pid'] ?? null,
                         'uptime' => $status['uptime'] ?? null,
-                        'config_file' => basename($configFile)
+                        'config_file' => basename($configFile),
+                        'directory' => $processConfig['directory'] ?? '',
+                        'project_filtered' => true
                     ];
                 }
             } catch (\Exception $e) {
@@ -95,7 +164,9 @@ class SupervisorService
             'running_queues' => array_values($runningQueueNames),
             'running_queue_count' => $runningQueueCount,
             'required_queue_count' => $requiredQueueCount,
-            'processes' => $processes
+            'processes' => $processes,
+            'project_path' => $this->getApplicationPath(),
+            'project_filter_enabled' => !empty($this->getApplicationPath())
         ];
         
         // Add specific error message for missing queues
@@ -118,13 +189,24 @@ class SupervisorService
 
 	protected function getQueues(): array
     {
-        $queuesConfig = $this->config['queues'] ?? 'default';
-        
-        if (is_string($queuesConfig)) {
-            return array_map('trim', explode(',', $queuesConfig));
+        // Try to automatically detect queues from Laravel config if available
+        if (function_exists('config')) {
+            $laravelQueues = config('queue.connections', []);
+            $queueNames = [];
+            
+            foreach ($laravelQueues as $name => $connection) {
+                if ($name !== 'sync' && $name !== 'null') {
+                    $queueNames[] = $name;
+                }
+            }
+            
+            if (!empty($queueNames)) {
+                return array_unique(array_merge(['default'], $queueNames));
+            }
         }
         
-        return is_array($queuesConfig) ? $queuesConfig : ['default'];
+        // Fallback to common queue names
+        return ['default'];
     }
 
     /**
