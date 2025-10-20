@@ -220,24 +220,13 @@ class SupervisorService
 
 	protected function getQueues(): array
     {
-        // Try to automatically detect queues from Laravel config if available
-        if (function_exists('config')) {
-            $laravelQueues = config('queue.connections', []);
-            $queueNames = [];
-            
-            foreach ($laravelQueues as $name => $connection) {
-                if ($name !== 'sync' && $name !== 'null') {
-                    $queueNames[] = $name;
-                }
-            }
-            
-            if (!empty($queueNames)) {
-                return array_unique(array_merge(['default'], $queueNames));
-            }
+        $queuesConfig = $this->config['queues'] ?? 'default';
+        
+        if (is_string($queuesConfig)) {
+            return array_map('trim', explode(',', $queuesConfig));
         }
         
-        // Fallback to common queue names
-        return ['default'];
+        return is_array($queuesConfig) ? $queuesConfig : ['default'];
     }
 
     /**
