@@ -272,10 +272,10 @@ class SupervisorService
             
             // Check if socket exists, if not use default supervisorctl
             if ($socketPath && file_exists($socketPath)) {
-                $command = "{$supervisorctl} -s unix://{$socketPath} status {$processName} 2>&1";
+                $command = "{$supervisorctl} -s unix://{$socketPath} status {$processName}:* 2>&1";
             } else {
                 // Fallback to default supervisorctl without socket
-                $command = "{$supervisorctl} status {$processName} 2>&1";
+                $command = "{$supervisorctl} status {$processName}:* 2>&1";
             }
             
             $output = [];
