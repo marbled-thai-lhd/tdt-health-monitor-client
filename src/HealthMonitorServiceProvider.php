@@ -84,7 +84,7 @@ class HealthMonitorServiceProvider extends ServiceProvider
         // Database backup if enabled
         if (config('health-monitor.backup.enabled')) {
             $backupSchedule = config('health-monitor.backup.schedule', '0 2 * * *');
-            $schedule->command('health:backup-database')
+            $schedule->command('health:backup-database --upload')
                      ->cron($backupSchedule)
                      ->withoutOverlapping();
         }
