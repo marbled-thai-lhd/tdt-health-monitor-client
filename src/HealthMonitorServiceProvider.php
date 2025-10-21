@@ -37,6 +37,7 @@ class HealthMonitorServiceProvider extends ServiceProvider
     {
         // Load routes
         $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
 
         if ($this->app->runningInConsole()) {
             // Publish config
