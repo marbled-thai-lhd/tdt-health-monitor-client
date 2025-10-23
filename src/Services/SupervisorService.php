@@ -163,7 +163,7 @@ class SupervisorService
         
         // Filter running processes and get unique queue names
         $runningProcessNames = array_filter($processes, function($p) {
-            return $p['status'] === 'RUNNING' || $p['status'] === 'PARTIAL';
+            return $p['status'] === 'RUNNING' || $p['status'] === 'PARTIAL' || $p['status'] === 'UNKNOWN';
         });
         $runningQueueNames = array_unique(array_map(fn($p) => $p['name'], $runningProcessNames));
         
@@ -175,7 +175,7 @@ class SupervisorService
         if ($runningQueueCount < $requiredQueueCount) {
             $status = 'error';
             $missingQueues = array_diff($requiredQueues, $runningQueueNames);
-        } elseif ($fullyRunningProcesses < $totalProcesses) {
+        } else if (array_find($runningProcessNames, fn($p) => $p['status'] === 'UNKNOWN')) {
             $status = 'warning';
         } else {
             $status = 'ok';
