@@ -175,7 +175,7 @@ class SupervisorService
         if ($runningQueueCount < $requiredQueueCount) {
             $status = 'error';
             $missingQueues = array_diff($requiredQueues, $runningQueueNames);
-        } else if (array_find($runningProcessNames, fn($p) => $p['status'] === 'UNKNOWN')) {
+        } else if (array_filter($runningProcessNames, fn($p) => $p['status'] === 'UNKNOWN')) {
             $status = 'warning';
         } else {
             $status = 'ok';
